@@ -1,16 +1,7 @@
-"""
-model.py
-6 × Encoder + 6 × Decoder U-Net  
-• 输入 : 13 × 209 × 289  (ERA5 粗分辨率)  
-• 输出 :  5 × 521 × 721  (高分辨率目标)  
-• Bottleneck 和 28×28 层带自注意力  
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# ────────── 基础模块 ──────────
 class ResBlock(nn.Module):
     """GroupNorm → SiLU → Conv ×2 + Dropout + Residual"""
     def __init__(self, ch, dropout=0.13):
@@ -28,7 +19,6 @@ class ResBlock(nn.Module):
 
 
 class SelfAttention(nn.Module):
-    """单头 Self-Attention（HW×HW）"""
     def __init__(self, ch: int):
         super().__init__()
         self.norm = nn.GroupNorm(8, ch)
@@ -45,7 +35,6 @@ class SelfAttention(nn.Module):
         out  = torch.bmm(attn, v).permute(0, 2, 1).reshape(b, c, h, w)
         return x + self.proj(out)
 
-# ────────── Stage 定义 ──────────
 class DownStage(nn.Module):
     """Conv → 4×Res → (Attn) → DownSample"""
     def __init__(self, in_ch, out_ch, use_attn=False):
@@ -64,7 +53,6 @@ class DownStage(nn.Module):
 
 
 class UpStage(nn.Module):
-    """UpSample → Concat skip → 4×Res → (Attn) → 1×1 Conv 降通道"""
     def __init__(self, in_ch, out_ch, use_attn=False):
         super().__init__()
         self.up   = nn.ConvTranspose2d(in_ch, out_ch, 4, stride=2, padding=1)
@@ -82,7 +70,6 @@ class UpStage(nn.Module):
         x = self.conv_out(x)                   # out_ch
         return x
 
-# ────────── 主网络 ──────────
 class ERA2HiResUNet(nn.Module):
     def __init__(self, in_ch: int = 13, out_ch: int = 5):
         super().__init__()
@@ -105,7 +92,7 @@ class ERA2HiResUNet(nn.Module):
             ResBlock(chs[5])
         )
 
-        # Decoder ↑  (保持通道对称，u1 输出 256 ch)
+        # Decoder ↑ 
         self.u5 = UpStage(chs[5], chs[4])
         self.u4 = UpStage(chs[4], chs[3], use_attn=True)
         self.u3 = UpStage(chs[3], chs[2])
